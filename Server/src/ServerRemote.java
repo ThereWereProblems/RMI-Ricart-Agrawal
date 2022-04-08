@@ -1,6 +1,14 @@
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 
 public class ServerRemote extends UnicastRemoteObject implements ServerInterface {
@@ -12,13 +20,25 @@ public class ServerRemote extends UnicastRemoteObject implements ServerInterface
 		// TODO Auto-generated constructor stub
 		users = new ArrayList<User>();
 	}
+	public void Message(String s) {
+		System.out.println("register " + s);
+	}
 
 	@Override
-	public boolean RegisterNewUser(User user) throws RemoteException {
+	public boolean RegisterNewUser(String _user) throws RemoteException {
 		// TODO Auto-generated method stub
-		System.out.println("register " + user.name);
 		//Dać walidacje portu
 		//Dać testowy ping
+		
+		
+	    User user = new User();
+	    try {
+	    	user = (User)objectFromString(_user);
+	    }
+	    catch(Exception ex) {
+	    	
+	    }
+	    		
 		
 		if(user.name == null || user.name.trim() == "")
 			return false;
@@ -31,11 +51,19 @@ public class ServerRemote extends UnicastRemoteObject implements ServerInterface
 		}
 		
 		try{
-		    user.ip = getClientHost();
+			user.ip = getClientHost();
 		}catch(Exception e){return false;}
 		
-		//Dac liste userów
-		//Wysłąć wiadomosc do reszty
+		for(User x : users) {
+			try {
+				Registry reg = LocateRegistry.getRegistry("localhost",x.port);
+				ClientInterface a = (ClientInterface)reg.lookup("rmi");
+				a.RegisterNewUser(serializableToString(user));
+			}
+			catch(Exception ex) {
+				System.out.println(ex);
+			}
+		}
 		
 		users.add(user);
 		
@@ -52,25 +80,37 @@ public class ServerRemote extends UnicastRemoteObject implements ServerInterface
 		    ip = getClientHost();
 		}catch(Exception e){return false;}
 		
-		boolean a = users.removeIf(n -> (n.ip == ip));
+		String s = users.stream().filter((n) -> n.ip == ip).findFirst().orElse(null).name;
+		boolean h = users.removeIf(n -> (n.ip == ip));
 		
-		if(a) {
+		if(h) {
 			System.out.println("deregister");
 
-			//rozesłać wiadomość
+			for(User x : users) {
+				try {
+					Registry reg = LocateRegistry.getRegistry("localhost",x.port);
+					ClientInterface a = (ClientInterface)reg.lookup("rmi");
+					a.DeregisterUser(s);
+				}
+				catch(Exception ex) {
+					System.out.println(ex);
+				}
+			}
 		}
 		
-		return a;
+		return h;
 	}
 
 	@Override
-	public boolean Request(Request req) throws RemoteException {
+	public boolean Request(String _req) throws RemoteException {
 		// TODO Auto-generated method stub
 		
 		String ip;
+		Request req = new Request();
 		
 		try{
 		    ip = getClientHost();
+		    req = (Request)objectFromString(_req);
 		}catch(Exception e){return false;}
 		
 		req.from = users.stream().filter((n) -> n.ip == ip).findFirst().orElse(null).name;
@@ -87,10 +127,18 @@ public class ServerRemote extends UnicastRemoteObject implements ServerInterface
 	}
 
 	@Override
-	public boolean Reply(Reply rep) throws RemoteException {
+	public boolean Reply(String _rep) throws RemoteException {
 		// TODO Auto-generated method stub
 		
-		User user = users.stream().filter((n) -> n.name == rep.to).findFirst().orElse(null);
+		Reply rep;
+
+		User user = new User();
+		try {
+			rep = (Reply)objectFromString(_rep);
+			user = users.stream().filter((n) -> n.name == rep.to).findFirst().orElse(null);
+		}catch(Exception ex) {		}
+		
+		
 		
 		if(user == null)
 			return false;
@@ -101,6 +149,49 @@ public class ServerRemote extends UnicastRemoteObject implements ServerInterface
 		return true;
 	}
 	
+	public String GetUsers() throws RemoteException{
+		
+		String ip;
+		List<String> names = new ArrayList<String>();
+		try{
+		    ip = getClientHost();
+		    for(User x : users) {
+		    	if(x.ip != ip)
+		    		names.add(x.name);
+		    }
+		    return serializableToString(names);
+		    
+		}catch(Exception e){
+			return "";
+		}
+		
+	}
+
 	
+	private static Object objectFromString(String s) throws IOException, ClassNotFoundException 
+	   {
+	        byte [] data = Base64.getDecoder().decode(s);
+	        ObjectInputStream ois = new ObjectInputStream( 
+	                                        new ByteArrayInputStream(data));
+	        Object o  = ois.readObject();
+	        ois.close();
+	        return o;
+	   }
+
+	private static String serializableToString(List<String> o ) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        oos.writeObject(o);
+        oos.close();
+        return Base64.getEncoder().encodeToString(baos.toByteArray()); 
+    }
+
+	private static String serializableToString( User o ) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        oos.writeObject(o);
+        oos.close();
+        return Base64.getEncoder().encodeToString(baos.toByteArray()); 
+    }
 
 }

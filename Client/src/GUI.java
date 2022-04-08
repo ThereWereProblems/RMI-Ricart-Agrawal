@@ -4,8 +4,12 @@ import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.WindowEvent;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectOutputStream;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
+import java.util.Base64;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -72,37 +76,34 @@ public class GUI {
 		try {
 			Registry reg = LocateRegistry.getRegistry("localhost",outPort);
 			ServerInterface a = (ServerInterface)reg.lookup("rmi");
-			a.RegisterNewUser(user);
+			a.RegisterNewUser(serializableToString(user));
 		}
 		catch(Exception ex) {
-			
+			System.out.println(ex);
+
+		}	
+		
+		try {
+			Registry reg = LocateRegistry.createRegistry(inPort);
+			ClientRemote ar = new ClientRemote(outPort);
+			reg.rebind("rmi", ar);
+			System.out.println("Client is ready");
 		}
-		
-		JButton button = new JButton("Add");
-		button.addActionListener(new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				try {
-					Registry reg = LocateRegistry.getRegistry("localhost",outPort);
-					ServerInterface a = (ServerInterface)reg.lookup("rmi");
-					a.DeregisterUser();
-				}
-				catch(Exception ex) {
-					
-				}
-				frame.dispatchEvent(new WindowEvent(frame, WindowEvent.WINDOW_CLOSING));
-			}
-		});
-		
+		catch(Exception ex)
+		{
+			ex.printStackTrace();
+		}
 				
-		JPanel clientPanel = new JPanel();
-		clientPanel.setBorder(BorderFactory.createEmptyBorder(30,30,10,30));
-		clientPanel.setLayout(new GridLayout(0,1));
-		clientPanel.add(button);
-		
-		frame.add(clientPanel, BorderLayout.CENTER);
-		frame.pack();
+		frame.setVisible(false);
 	}
+	
+	private static String serializableToString( User o ) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        oos.writeObject(o);
+        oos.close();
+        return Base64.getEncoder().encodeToString(baos.toByteArray()); 
+    }
 
 	public static void main(String[] args) {
 		// TODO Auto-generated method stub

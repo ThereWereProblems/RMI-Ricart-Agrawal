@@ -21,6 +21,7 @@ public class GUI {
 		frame = new JFrame();
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		frame.setTitle("Server");
+		frame.setVisible(true);
 
 	}
 
