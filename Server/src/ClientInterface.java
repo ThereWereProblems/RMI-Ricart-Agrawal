@@ -1,6 +1,7 @@
+import java.rmi.Remote;
 import java.rmi.RemoteException;
 
-public interface ClientInterface {
+public interface ClientInterface extends Remote {
 	
 	public boolean RegisterNewUser(String _user) throws RemoteException;
 	public boolean DeregisterUser(String name) throws RemoteException;

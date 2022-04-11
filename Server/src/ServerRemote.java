@@ -71,17 +71,11 @@ public class ServerRemote extends UnicastRemoteObject implements ServerInterface
 	}
 
 	@Override
-	public boolean DeregisterUser() throws RemoteException {
+	public boolean DeregisterUser(String name) throws RemoteException {
 		// TODO Auto-generated method stub
 		
-		String ip;
-		
-		try{
-		    ip = getClientHost();
-		}catch(Exception e){return false;}
-		
-		String s = users.stream().filter((n) -> n.ip == ip).findFirst().orElse(null).name;
-		boolean h = users.removeIf(n -> (n.ip == ip));
+		//String s = users.stream().filter((n) -> n.name == name).findFirst().orElse(null).name;
+		boolean h = users.removeIf(n -> (n.name == name));
 		
 		if(h) {
 			System.out.println("deregister");
@@ -90,7 +84,7 @@ public class ServerRemote extends UnicastRemoteObject implements ServerInterface
 				try {
 					Registry reg = LocateRegistry.getRegistry("localhost",x.port);
 					ClientInterface a = (ClientInterface)reg.lookup("rmi");
-					a.DeregisterUser(s);
+					a.DeregisterUser(name);
 				}
 				catch(Exception ex) {
 					System.out.println(ex);
@@ -117,7 +111,7 @@ public class ServerRemote extends UnicastRemoteObject implements ServerInterface
 		
 		for(User x : users) {
 			
-			if(x.ip != ip)
+			if(x.ip.compareTo(ip) != 0)
 			{
 				//wysłac zapytanie
 			}
@@ -149,15 +143,16 @@ public class ServerRemote extends UnicastRemoteObject implements ServerInterface
 		return true;
 	}
 	
-	public String GetUsers() throws RemoteException{
+	public String GetUsers(String name) throws RemoteException{
 		
 		String ip;
 		List<String> names = new ArrayList<String>();
 		try{
-		    ip = getClientHost();
 		    for(User x : users) {
-		    	if(x.ip != ip)
+		    	if(x.name.compareTo(name) != 0)
+		    	{
 		    		names.add(x.name);
+		    	}
 		    }
 		    return serializableToString(names);
 		    

@@ -2,6 +2,7 @@ import java.awt.BorderLayout;
 import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -21,6 +22,7 @@ import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 
 public class ClientRemote extends UnicastRemoteObject implements ClientInterface {
@@ -35,12 +37,17 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 	private List<Request> waitingRequests;
 	
 	private int outPort;
+	private String myName;
 	
 	private JFrame frame;
-	private JPanel clientPanel;
+	private JPanel upPanel;
+	private JPanel leftPanel;
+	private JPanel centerPanel;
+	private JPanel rightPanel;
+	private JPanel downPanel;
 	private JList listUsers;
 	
-	protected ClientRemote(int _port) throws RemoteException {
+	protected ClientRemote(int _port, String _myName) throws RemoteException {
 		super();
 		// TODO Auto-generated constructor stub
 		users = new ArrayList<User>();
@@ -50,13 +57,14 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 		waitingRequests = new ArrayList<Request>();
 		inCriticalSection = false;
 		
+		myName = _myName;
 		outPort = _port;
 		frame = new JFrame();
 		
 		try {
 			Registry reg = LocateRegistry.getRegistry("localhost",outPort);
 			ServerInterface a = (ServerInterface)reg.lookup("rmi");
-			String s = a.GetUsers();
+			String s = a.GetUsers(myName);
 			List<String> names = (ArrayList<String>)objectFromString(s);
 			for(String x : names) {
 				User u = new User();
@@ -82,8 +90,10 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 			users.add(user);
 			DefaultListModel listModel = (DefaultListModel) listUsers.getModel();
 	        listModel.addElement(user.name);
+	        System.out.println(user.name);
 		}
 		catch(Exception ex){
+			System.out.println(ex);
 			return false;
 		}
 		
@@ -175,7 +185,7 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 				try {
 					Registry reg = LocateRegistry.getRegistry("localhost",outPort);
 					ServerInterface a = (ServerInterface)reg.lookup("rmi");
-					a.DeregisterUser();
+					a.DeregisterUser(myName);
 				}
 				catch(Exception ex) {
 					
@@ -184,10 +194,30 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 			}
 		});
 		button.setBounds(470, 420, 100, 50);
-		clientPanel = new JPanel();
-		clientPanel.setBorder(BorderFactory.createEmptyBorder(30,30,10,30));
-		clientPanel.setLayout(new GridLayout(0,1));
-		clientPanel.add(button);
+		frame.addWindowListener(new WindowAdapter(){
+            public void windowClosing(WindowEvent e){
+                int i=JOptionPane.showConfirmDialog(null, "Seguro que quiere salir?");
+                if(i==0)
+                {
+                	try {
+    					Registry reg = LocateRegistry.getRegistry("localhost",outPort);
+    					ServerInterface a = (ServerInterface)reg.lookup("rmi");
+    					a.DeregisterUser(myName);
+    				}
+    				catch(Exception ex) {
+    					
+    				}
+                    System.exit(0);//cierra aplicacion
+                }
+            }
+        });
+		upPanel = new JPanel();
+		upPanel.add(new JLabel("Tu bedzie wybór sekcji krytycznej"));
+		leftPanel = new JPanel();
+		downPanel = new JPanel();
+		leftPanel.setBorder(BorderFactory.createEmptyBorder(30,30,10,30));
+		leftPanel.setLayout(new GridLayout(0,1));
+		downPanel.add(button);
 		
 		JLabel label = new JLabel();
 		label.setBounds(30, 20, 200, 50);
@@ -198,12 +228,13 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 		}
 		listUsers = new JList(l1);
 		listUsers.setBounds(30, 100, 200, 350);
-		clientPanel.add(label);
-		clientPanel.add(listUsers);
+		leftPanel.add(label);
+		leftPanel.add(listUsers);
 		
 		
-		frame.add(clientPanel, BorderLayout.CENTER);
-		frame.pack();
+		frame.add(leftPanel, BorderLayout.LINE_START);
+		frame.add(button,BorderLayout.PAGE_END);
+		//frame.pack();
 		frame.setTitle("Client GUI");
 		frame.setVisible(true);
 	}

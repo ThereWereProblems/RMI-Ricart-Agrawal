@@ -28,7 +28,7 @@ public class GUI {
 	
 	public GUI() {
 		frame = new JFrame();
-		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		//frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		frame.setTitle("Our GUI");
 		
 		startPanel = new JPanel();
@@ -85,7 +85,7 @@ public class GUI {
 		
 		try {
 			Registry reg = LocateRegistry.createRegistry(inPort);
-			ClientRemote ar = new ClientRemote(outPort);
+			ClientRemote ar = new ClientRemote(outPort, name);
 			reg.rebind("rmi", ar);
 			System.out.println("Client is ready");
 		}
@@ -94,8 +94,8 @@ public class GUI {
 			ex.printStackTrace();
 		}
 				
-		frame.setVisible(false);
-	}
+		frame.dispatchEvent(new WindowEvent(frame, WindowEvent.WINDOW_CLOSING));
+		}
 	
 	private static String serializableToString( User o ) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
