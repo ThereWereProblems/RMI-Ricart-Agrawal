@@ -34,6 +34,7 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 	JPanel mainPanel;
 	
 	JComboBox combo;
+	int selectedInCombo;
 	
 	List<Section> sections; 
 	
@@ -173,10 +174,55 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 				sections.add(s);
 				combo.addItem(s.nameSection);
 				combo.setSelectedIndex(sections.size()-1);
+				selectedInCombo = sections.size()-1;
 				list1.setModel(s.listUsers);
 				list2.setModel(s.listAcceptedRequests);
 				list3.setModel(s.listWaitingRequests);
 				list4.setModel(s.listWaitingForAnswers);
+			}
+		});
+		
+		buttonChange.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				selectedInCombo = combo.getSelectedIndex();
+				if(selectedInCombo < 0) {
+					list1.setModel(new DefaultListModel());
+					list2.setModel(new DefaultListModel());
+					list3.setModel(new DefaultListModel());
+					list4.setModel(new DefaultListModel());
+				}
+				else {
+					list1.setModel(sections.get(selectedInCombo).listUsers);
+					list2.setModel(sections.get(selectedInCombo).listAcceptedRequests);
+					list3.setModel(sections.get(selectedInCombo).listWaitingRequests);
+					list4.setModel(sections.get(selectedInCombo).listWaitingForAnswers);
+				}
+					
+				
+			}
+		});
+
+		disconnectButton.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				Section s = sections.get(selectedInCombo);
+				try {
+					Registry reg = LocateRegistry.getRegistry(s.sectionHost,s.sectionPort);
+					ServerInterface a = (ServerInterface)reg.lookup("rmi");
+					a.DeregisterUser(myPort);
+				}
+				catch(Exception ex) {
+					System.out.println(ex);
+				}	
+				sections.remove(selectedInCombo);
+				combo.remove(selectedInCombo);
+				selectedInCombo = -1;
+				combo.setSelectedIndex(-1);
+				list1.setModel(new DefaultListModel());
+				list2.setModel(new DefaultListModel());
+				list3.setModel(new DefaultListModel());
+				list4.setModel(new DefaultListModel());
 			}
 		});
 	}
@@ -201,7 +247,7 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 		
 		try {
 			String sectionHost = getClientHost();
-			Section s = sections.stream().filter((n) -> n.sectionHost == sectionHost && n.sectionPort == sectionPort).findFirst().orElse(null);
+			Section s = sections.stream().filter((n) -> n.sectionHost.compareTo(sectionHost) == 0 && n.sectionPort == sectionPort).findFirst().orElse(null);
 			
 			
 			User user = (User)objectFromString(_user);
@@ -221,13 +267,13 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 		
 		try {
 			String sectionHost = getClientHost();
-			Section s = sections.stream().filter((n) -> n.sectionHost == sectionHost && n.sectionPort == sectionPort).findFirst().orElse(null);
+			Section s = sections.stream().filter((n) -> n.sectionHost.compareTo(sectionHost) == 0 && n.sectionPort == sectionPort).findFirst().orElse(null);
 			
 			
 			User user = (User)objectFromString(_user);
-			boolean a = s.users.removeIf(n -> (n.ip == user.ip && n.port == user.port));
-			s.waitingForAnswers.removeIf(n -> (n.fromHost == user.ip && n.fromPort == user.port));
-			s.waitingRequests.removeIf(n -> (n.fromHost == user.ip && n.fromPort == user.port));
+			boolean a = s.users.removeIf(n -> (n.ip.compareTo(user.ip) == 0 && n.port == user.port));
+			s.waitingForAnswers.removeIf(n -> (n.fromHost.compareTo(user.ip) == 0 && n.fromPort == user.port));
+			s.waitingRequests.removeIf(n -> (n.fromHost.compareTo(user.ip) == 0 && n.fromPort == user.port));
 
 			if(a) {
 				s.listUsers.removeAllElements();
@@ -262,7 +308,7 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 		// TODO Auto-generated method stub
 		try {
 			String sectionHost = getClientHost();
-			Section s = sections.stream().filter((n) -> n.sectionHost == sectionHost && n.sectionPort == sectionPort).findFirst().orElse(null);
+			Section s = sections.stream().filter((n) -> n.sectionHost.compareTo(sectionHost) == 0 && n.sectionPort == sectionPort).findFirst().orElse(null);
 
 			
 			Request req = (Request)objectFromString(_req);
@@ -290,12 +336,12 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 		// TODO Auto-generated method stub
 		try {
 			String sectionHost = getClientHost();
-			Section s = sections.stream().filter((n) -> n.sectionHost == sectionHost && n.sectionPort == sectionPort).findFirst().orElse(null);
+			Section s = sections.stream().filter((n) -> n.sectionHost.compareTo(sectionHost) == 0 && n.sectionPort == sectionPort).findFirst().orElse(null);
 
 
 			Reply rep = (Reply)objectFromString(_rep);
 			if(rep.date == s.sendRequest.date) {
-				s.waitingForAnswers.removeIf(n -> (n.fromHost == rep.fromHost && n.fromPort == rep.fromPort));
+				s.waitingForAnswers.removeIf(n -> (n.fromHost.compareTo(rep.fromHost) == 0 && n.fromPort == rep.fromPort));
 				s.listWaitingForAnswers.removeAllElements();
 		        for(Reply x : s.waitingForAnswers) {
 		        	s.listWaitingForAnswers.addElement(x.fromName);
