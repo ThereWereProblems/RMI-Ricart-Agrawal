@@ -6,13 +6,17 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.InetAddress;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListModel;
@@ -29,7 +33,7 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 	
 	private int myPort;
 	private String myName;
-
+	
 	JFrame frame;
 	JPanel mainPanel;
 	
@@ -42,6 +46,12 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 	JList list2;
 	JList list3;
 	JList list4;
+	
+	JTextField timeField;
+	JTextField maxWaitingField;
+	JLabel info;
+	
+	JButton cancelButton;
 	
 	public ClientRemote(int port, String name) throws RemoteException {
 		super();
@@ -79,11 +89,12 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 		
 		//down Panel
 		JLabel timeLabel = new JLabel("Wejdz do sekcji na:");
-		JTextField timeField = new JTextField();
+		timeField = new JTextField();
 		JButton enterButton = new JButton("Wejdź");
+		info = new JLabel();
 		JLabel maxWaitingLabel = new JLabel("Maksymalny czas oczekiwania:");
-		JTextField maxWaitingField = new JTextField();
-		JButton cancelButton = new JButton("Anuluj");
+		maxWaitingField = new JTextField();
+		cancelButton = new JButton("Anuluj");
 		JButton disconnectButton = new JButton("Rozłącz");
 
 
@@ -112,7 +123,7 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 		downPanel.add(timeLabel);
 		downPanel.add(timeField);
 		downPanel.add(enterButton);
-		downPanel.add(new JLabel());
+		downPanel.add(info);
 		downPanel.add(maxWaitingLabel);
 		downPanel.add(maxWaitingField);
 		downPanel.add(cancelButton);
@@ -141,6 +152,9 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 				s.sectionHost= JOptionPane.showInputDialog("Wprowadź ip serwera");
 				s.sectionPort= Integer.valueOf(JOptionPane.showInputDialog("Wprowadź port serwera"));
 				try {
+					if(s.sectionHost.compareTo("localhost")==0) {
+						s.sectionHost = InetAddress.getLocalHost().getHostAddress();
+					}
 					Registry reg = LocateRegistry.getRegistry(s.sectionHost,s.sectionPort);
 					ServerInterface a = (ServerInterface)reg.lookup("rmi");
 					a.Ping();
@@ -197,6 +211,7 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 					list2.setModel(sections.get(selectedInCombo).listAcceptedRequests);
 					list3.setModel(sections.get(selectedInCombo).listWaitingRequests);
 					list4.setModel(sections.get(selectedInCombo).listWaitingForAnswers);
+					info = sections.get(selectedInCombo).info;
 				}
 					
 				
@@ -225,6 +240,151 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 				list4.setModel(new DefaultListModel());
 			}
 		});
+		
+		enterButton.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				Section s = sections.get(selectedInCombo);
+				if(s.threadpool == null)
+					s.threadpool = Executors.newCachedThreadPool();
+				s.taskWaiting = s.threadpool.submit(() -> WaitingForCriticSection());
+			}
+		});
+		
+		cancelButton.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				Section s = sections.get(selectedInCombo);
+				
+				s.waitingForAnswers.clear();
+				s.listWaitingForAnswers.clear();
+				
+				if(s.taskWaiting!=null)
+					s.taskWaiting.cancel(true);
+				s.taskWaiting = null;
+				
+				if(s.taskSection!=null)
+					s.taskSection.cancel(true);
+				s.taskSection = null;
+				
+				s.info.setText("Poza sekcją");
+				s.waitingForCriticalSection = false;
+				s.inCriticalSection = false;
+				
+				for(Request x : s.waitingRequests) {
+					Reply rep = new Reply();
+					rep.fromPort = myPort;
+					rep.toHost = x.fromHost;
+					rep.toPort = x.fromPort;
+					try {
+						Registry reg = LocateRegistry.getRegistry(s.sectionHost,s.sectionPort);
+						ServerInterface a = (ServerInterface)reg.lookup("rmi");
+						a.Reply(serializableToString(rep));
+					}
+					catch(Exception ex) {
+						System.out.println(ex);
+					}
+					s.acceptedRequests.add(x);
+					s.listAcceptedRequests.addElement(x.fromName);
+				}
+			}
+		});
+		
+		
+	}
+	
+	private void WaitingForCriticSection() {
+		Section s = sections.get(selectedInCombo);
+		s.waitingForCriticalSection = true;
+		int maxWait = 0;
+		try {
+			s.enterFor = Integer.parseInt(timeField.getText().trim());
+		}catch(Exception ex) {s.enterFor = 0;}
+		try{
+			maxWait = Integer.parseInt(maxWaitingField.getText().trim());
+		}catch(Exception ex) {}
+		
+		Request req = new Request();
+		req.fromPort = myPort;
+		req.fromName = myName;
+		req.date = LocalDateTime.now();
+		try {
+			Registry reg = LocateRegistry.getRegistry(s.sectionHost,s.sectionPort);
+			ServerInterface a = (ServerInterface)reg.lookup("rmi");
+			a.Reply(serializableToString(req));
+		}
+		catch(Exception ex) {
+			System.out.println(ex);
+		}
+		for(User x : s.users) {
+			Reply rep  = new Reply();
+			rep.fromHost = x.ip;
+			rep.fromPort = x.port;
+			rep.fromName = x.name;
+			s.waitingForAnswers.add(rep);
+			s.listWaitingForAnswers.addElement(x.name);
+		}
+		
+		if(maxWait > 0 && !s.inCriticalSection) {
+			while(maxWait>0 && !s.inCriticalSection) {
+				s.info.setText("Oczekuję: " + maxWait);
+				maxWait--;
+				try {
+					s.taskWaiting.wait(1000);
+				}catch(Exception ex) {}
+			}
+			if(!s.inCriticalSection)
+			{
+				s.waitingForCriticalSection = false;
+				s.waitingForAnswers.clear();
+				s.listWaitingForAnswers.clear();
+				s.info.setText("Poza sekcją");
+			}
+		}
+		else {
+			if(!s.inCriticalSection)
+				s.info.setText("Oczekuję");
+		}
+		return;
+	}
+	
+	private void CriticSection(Section s) {
+		s.inCriticalSection = true;
+		if(s.enterFor > 0) {
+			while(s.enterFor>0) {
+				s.info.setText("W sekcji: " + s.enterFor);
+				s.enterFor--;
+				try {
+					s.taskWaiting.wait(1000);
+				}catch(Exception ex) {}
+			}
+			s.waitingForAnswers.clear();
+			s.listWaitingForAnswers.clear();
+			s.info.setText("Poza sekcją");
+			s.waitingForCriticalSection = false;
+			s.inCriticalSection = false;
+			
+			for(Request x : s.waitingRequests) {
+				Reply rep = new Reply();
+				rep.fromPort = myPort;
+				rep.toHost = x.fromHost;
+				rep.toPort = x.fromPort;
+				try {
+					Registry reg = LocateRegistry.getRegistry(s.sectionHost,s.sectionPort);
+					ServerInterface a = (ServerInterface)reg.lookup("rmi");
+					a.Reply(serializableToString(rep));
+				}
+				catch(Exception ex) {
+					System.out.println(ex);
+				}
+				s.acceptedRequests.add(x);
+				s.listAcceptedRequests.addElement(x.fromName);
+			}
+		}
+		else {
+			s.info.setText("W sekcji");
+		}
+		return;
 	}
 
 	public static void main(String[] args) {
@@ -289,9 +449,9 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 		        	s.listWaitingRequests.addElement(x.fromName);
 		        }
 				
-				if(s.inCriticalSection) {
+				if(s.waitingForCriticalSection) {
 					if(s.waitingForAnswers.size() == 0) {
-						//wywołanie sekcji krytycznej async
+						s.taskSection = s.threadpool.submit(() -> CriticSection(s));
 					}
 				}
 			}
@@ -312,7 +472,7 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 
 			
 			Request req = (Request)objectFromString(_req);
-			if(s.inCriticalSection) {
+			if(s.waitingForCriticalSection) {
 				s.waitingRequests.add(req);
 				s.waitingRequests.stream()
 			  	.sorted((object1, object2) -> object1.date.compareTo(object2.date));
@@ -320,8 +480,20 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 				return false;
 			}
 			else {
-				//wyslij opdowiedz
-				//dodaj do tabelki
+				Reply rep = new Reply();
+				rep.fromPort = myPort;
+				rep.toHost = req.fromHost;
+				rep.toPort = req.fromPort;
+				try {
+					Registry reg = LocateRegistry.getRegistry(sectionHost,sectionPort);
+					ServerInterface a = (ServerInterface)reg.lookup("rmi");
+					a.Reply(serializableToString(rep));
+				}
+				catch(Exception ex) {
+					System.out.println(ex);
+				}
+				s.acceptedRequests.add(req);
+				s.listAcceptedRequests.addElement(req.fromName);
 			}			
 		}
 		catch(Exception ex){
@@ -338,6 +510,8 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 			String sectionHost = getClientHost();
 			Section s = sections.stream().filter((n) -> n.sectionHost.compareTo(sectionHost) == 0 && n.sectionPort == sectionPort).findFirst().orElse(null);
 
+			if(!s.waitingForCriticalSection)
+				return true;
 
 			Reply rep = (Reply)objectFromString(_rep);
 			if(rep.date == s.sendRequest.date) {
@@ -348,7 +522,7 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 		        }
 				
 				if(s.waitingForAnswers.size() == 0) {
-					//wywołanie sekcji krytycznej async
+					s.taskSection = s.threadpool.submit(() -> CriticSection(s));
 				}
 			}			
 		}
@@ -383,5 +557,20 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
         return Base64.getEncoder().encodeToString(baos.toByteArray()); 
     }
 	
+	private static String serializableToString( Reply o ) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        oos.writeObject(o);
+        oos.close();
+        return Base64.getEncoder().encodeToString(baos.toByteArray()); 
+    }
+	
+	private static String serializableToString( Request o ) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        oos.writeObject(o);
+        oos.close();
+        return Base64.getEncoder().encodeToString(baos.toByteArray()); 
+    }
 	
 }

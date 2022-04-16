@@ -2,9 +2,12 @@
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 
 import javax.swing.DefaultListModel;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
 
@@ -14,6 +17,13 @@ public class Section {
 	public String sectionHost;
 	public int sectionPort;
 	
+	public ExecutorService threadpool;
+	public Future taskWaiting;
+	public Future taskSection;
+	public JLabel info;
+	public int enterFor;
+	
+	public boolean waitingForCriticalSection;
 	public boolean inCriticalSection;
 	public Request sendRequest;
 	
@@ -38,6 +48,10 @@ public class Section {
 		listAcceptedRequests = new DefaultListModel();
 		listWaitingRequests = new DefaultListModel();
 		listWaitingForAnswers = new DefaultListModel();
+		
+		info = new JLabel("Poza sekcją");
+		waitingForCriticalSection = false;
+		inCriticalSection = false;
 	}
 
 }
