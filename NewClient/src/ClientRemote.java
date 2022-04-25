@@ -1,6 +1,8 @@
 import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -17,6 +19,8 @@ import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListModel;
@@ -52,6 +56,9 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 	JLabel info;
 	
 	JButton cancelButton;
+	
+	ExecutorService pingThreadPool;
+	Future pingTask;
 	
 	public ClientRemote(int port, String name) throws RemoteException {
 		super();
@@ -142,7 +149,8 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 		frame.setDefaultCloseOperation(frame.EXIT_ON_CLOSE);
 		frame.setVisible(true);
 		
-		
+		pingThreadPool = Executors.newCachedThreadPool();
+		pingTask = pingThreadPool.submit(() -> CheckPing());		
 		
 		buttonJoin.addActionListener(new ActionListener() {
 			@Override
@@ -193,6 +201,7 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 				list2.setModel(s.listAcceptedRequests);
 				list3.setModel(s.listWaitingRequests);
 				list4.setModel(s.listWaitingForAnswers);
+				info.setText(s.info.getText());
 			}
 		});
 		
@@ -211,7 +220,7 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 					list2.setModel(sections.get(selectedInCombo).listAcceptedRequests);
 					list3.setModel(sections.get(selectedInCombo).listWaitingRequests);
 					list4.setModel(sections.get(selectedInCombo).listWaitingForAnswers);
-					info = sections.get(selectedInCombo).info;
+					info.setText(sections.get(selectedInCombo).info.getText());
 				}
 					
 				
@@ -221,6 +230,8 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 		disconnectButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
+				if(selectedInCombo == -1)
+					return;
 				Section s = sections.get(selectedInCombo);
 				try {
 					Registry reg = LocateRegistry.getRegistry(s.sectionHost,s.sectionPort);
@@ -231,13 +242,14 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 					System.out.println(ex);
 				}	
 				sections.remove(selectedInCombo);
-				combo.remove(selectedInCombo);
+				combo.removeItemAt(selectedInCombo);
 				selectedInCombo = -1;
 				combo.setSelectedIndex(-1);
 				list1.setModel(new DefaultListModel());
 				list2.setModel(new DefaultListModel());
 				list3.setModel(new DefaultListModel());
 				list4.setModel(new DefaultListModel());
+				info.setText("");
 			}
 		});
 		
@@ -245,6 +257,8 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				Section s = sections.get(selectedInCombo);
+				if(s.waitingForCriticalSection)
+					return;
 				if(s.threadpool == null)
 					s.threadpool = Executors.newCachedThreadPool();
 				s.taskWaiting = s.threadpool.submit(() -> WaitingForCriticSection());
@@ -254,6 +268,8 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 		cancelButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
+				if(selectedInCombo == -1)
+					return;
 				Section s = sections.get(selectedInCombo);
 				
 				s.waitingForAnswers.clear();
@@ -268,6 +284,8 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 				s.taskSection = null;
 				
 				s.info.setText("Poza sekcją");
+				if(sections.get(selectedInCombo).sectionHost.compareTo(s.sectionHost) == 0 && sections.get(selectedInCombo).sectionPort == s.sectionPort)
+					info.setText(s.info.getText());
 				s.waitingForCriticalSection = false;
 				s.inCriticalSection = false;
 				
@@ -276,6 +294,7 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 					rep.fromPort = myPort;
 					rep.toHost = x.fromHost;
 					rep.toPort = x.fromPort;
+					rep.date = x.date;
 					try {
 						Registry reg = LocateRegistry.getRegistry(s.sectionHost,s.sectionPort);
 						ServerInterface a = (ServerInterface)reg.lookup("rmi");
@@ -287,10 +306,69 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 					s.acceptedRequests.add(x);
 					s.listAcceptedRequests.addElement(x.fromName);
 				}
+				s.waitingRequests.clear();
+				s.listWaitingRequests.clear();
 			}
 		});
 		
-		
+		frame.addWindowListener(new WindowAdapter(){
+            public void windowClosing(WindowEvent e){
+                int i=JOptionPane.showConfirmDialog(null, "Seguro que quiere salir?");
+                if(i==0)
+                {
+                	for(Section s : sections) {
+                		try {
+        					Registry reg = LocateRegistry.getRegistry(s.sectionHost,s.sectionPort);
+        					ServerInterface a = (ServerInterface)reg.lookup("rmi");
+        					a.DeregisterUser(myPort);
+        				}
+        				catch(Exception ex) {
+        					
+        				}
+                	}
+                    System.exit(0);//cierra aplicacion
+                }
+            }
+        });
+
+	}
+	
+	private void CheckPing() {
+		while(true) {
+			try {
+				TimeUnit.SECONDS.sleep(10);
+			}catch(Exception ex) {}
+			for(int i = 0; i < sections.size(); i++) {
+				Section s = sections.get(i);
+				boolean res = false;
+				for(int j = 0; j < 4; j++) {
+					try {
+						Registry reg = LocateRegistry.getRegistry(s.sectionHost,s.sectionPort);
+						ServerInterface a = (ServerInterface)reg.lookup("rmi");
+						res = a.Ping();
+					}catch(Exception ex) {}
+					if(res)
+						break;
+					try {
+						TimeUnit.SECONDS.sleep(1);
+					}catch(Exception ex) {}
+				}
+				if(!res) {
+					if(i == selectedInCombo) {
+						selectedInCombo = -1;
+						combo.setSelectedIndex(-1);
+						list1.setModel(new DefaultListModel());
+						list2.setModel(new DefaultListModel());
+						list3.setModel(new DefaultListModel());
+						list4.setModel(new DefaultListModel());
+						info.setText("");
+					}
+					sections.remove(i);
+					combo.removeItemAt(i);
+					i--;
+				}
+			}
+		}
 	}
 	
 	private void WaitingForCriticSection() {
@@ -308,29 +386,39 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 		req.fromPort = myPort;
 		req.fromName = myName;
 		req.date = LocalDateTime.now();
-		try {
-			Registry reg = LocateRegistry.getRegistry(s.sectionHost,s.sectionPort);
-			ServerInterface a = (ServerInterface)reg.lookup("rmi");
-			a.Reply(serializableToString(req));
-		}
-		catch(Exception ex) {
-			System.out.println(ex);
-		}
+		s.sendRequest = req;
+		
+		
 		for(User x : s.users) {
 			Reply rep  = new Reply();
 			rep.fromHost = x.ip;
 			rep.fromPort = x.port;
 			rep.fromName = x.name;
+			rep.date = s.sendRequest.date;
 			s.waitingForAnswers.add(rep);
 			s.listWaitingForAnswers.addElement(x.name);
 		}
 		
+		
+		try {
+			Registry reg = LocateRegistry.getRegistry(s.sectionHost,s.sectionPort);
+			ServerInterface a = (ServerInterface)reg.lookup("rmi");
+			a.Request(serializableToString(req));
+		}
+		catch(Exception ex) {
+			System.out.println(ex);
+		}
+		
+		
 		if(maxWait > 0 && !s.inCriticalSection) {
 			while(maxWait>0 && !s.inCriticalSection) {
 				s.info.setText("Oczekuję: " + maxWait);
+				if(sections.get(selectedInCombo).sectionHost.compareTo(s.sectionHost) == 0 && sections.get(selectedInCombo).sectionPort == s.sectionPort)
+					info.setText(s.info.getText());
+				System.out.println(s.info.getText());
 				maxWait--;
 				try {
-					s.taskWaiting.wait(1000);
+					TimeUnit.SECONDS.sleep(1);
 				}catch(Exception ex) {}
 			}
 			if(!s.inCriticalSection)
@@ -339,11 +427,37 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 				s.waitingForAnswers.clear();
 				s.listWaitingForAnswers.clear();
 				s.info.setText("Poza sekcją");
+				if(sections.get(selectedInCombo).sectionHost.compareTo(s.sectionHost) == 0 && sections.get(selectedInCombo).sectionPort == s.sectionPort)
+					info.setText(s.info.getText());
+				System.out.println(s.info.getText());
+				//odp
+				for(Request x : s.waitingRequests) {
+					Reply rep = new Reply();
+					rep.fromPort = myPort;
+					rep.toHost = x.fromHost;
+					rep.toPort = x.fromPort;
+					rep.date = x.date;
+					try {
+						Registry reg = LocateRegistry.getRegistry(s.sectionHost,s.sectionPort);
+						ServerInterface a = (ServerInterface)reg.lookup("rmi");
+						a.Reply(serializableToString(rep));
+					}
+					catch(Exception ex) {
+						System.out.println(ex);
+					}
+					s.acceptedRequests.add(x);
+					s.listAcceptedRequests.addElement(x.fromName);
+				}
+				s.waitingRequests.clear();
+				s.listWaitingRequests.clear();
 			}
 		}
 		else {
 			if(!s.inCriticalSection)
 				s.info.setText("Oczekuję");
+			if(sections.get(selectedInCombo).sectionHost.compareTo(s.sectionHost) == 0 && sections.get(selectedInCombo).sectionPort == s.sectionPort)
+				info.setText(s.info.getText());
+			System.out.println(s.info.getText());
 		}
 		return;
 	}
@@ -353,14 +467,18 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 		if(s.enterFor > 0) {
 			while(s.enterFor>0) {
 				s.info.setText("W sekcji: " + s.enterFor);
+				if(sections.get(selectedInCombo).sectionHost.compareTo(s.sectionHost) == 0 && sections.get(selectedInCombo).sectionPort == s.sectionPort)
+					info.setText(s.info.getText());
 				s.enterFor--;
 				try {
-					s.taskWaiting.wait(1000);
+					TimeUnit.SECONDS.sleep(1);
 				}catch(Exception ex) {}
 			}
 			s.waitingForAnswers.clear();
 			s.listWaitingForAnswers.clear();
 			s.info.setText("Poza sekcją");
+			if(sections.get(selectedInCombo).sectionHost.compareTo(s.sectionHost) == 0 && sections.get(selectedInCombo).sectionPort == s.sectionPort)
+				info.setText(s.info.getText());
 			s.waitingForCriticalSection = false;
 			s.inCriticalSection = false;
 			
@@ -369,6 +487,7 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 				rep.fromPort = myPort;
 				rep.toHost = x.fromHost;
 				rep.toPort = x.fromPort;
+				rep.date = x.date;
 				try {
 					Registry reg = LocateRegistry.getRegistry(s.sectionHost,s.sectionPort);
 					ServerInterface a = (ServerInterface)reg.lookup("rmi");
@@ -380,9 +499,13 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 				s.acceptedRequests.add(x);
 				s.listAcceptedRequests.addElement(x.fromName);
 			}
+			s.waitingRequests.clear();
+			s.listWaitingRequests.clear();
 		}
 		else {
 			s.info.setText("W sekcji");
+			if(sections.get(selectedInCombo).sectionHost.compareTo(s.sectionHost) == 0 && sections.get(selectedInCombo).sectionPort == s.sectionPort)
+				info.setText(s.info.getText());
 		}
 		return;
 	}
@@ -472,10 +595,10 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 
 			
 			Request req = (Request)objectFromString(_req);
-			if(s.waitingForCriticalSection) {
+			if(s.waitingForCriticalSection && s.sendRequest.date.isBefore(req.date)) {
 				s.waitingRequests.add(req);
-				s.waitingRequests.stream()
-			  	.sorted((object1, object2) -> object1.date.compareTo(object2.date));
+				//s.waitingRequests.stream()
+			  	//.sorted((object1, object2) -> object1.date.compareTo(object2.date));
 				s.listWaitingRequests.addElement(req.fromName);
 				return false;
 			}
@@ -484,6 +607,7 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 				rep.fromPort = myPort;
 				rep.toHost = req.fromHost;
 				rep.toPort = req.fromPort;
+				rep.date = req.date;
 				try {
 					Registry reg = LocateRegistry.getRegistry(sectionHost,sectionPort);
 					ServerInterface a = (ServerInterface)reg.lookup("rmi");
@@ -514,10 +638,17 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 				return true;
 
 			Reply rep = (Reply)objectFromString(_rep);
-			if(rep.date == s.sendRequest.date) {
-				s.waitingForAnswers.removeIf(n -> (n.fromHost.compareTo(rep.fromHost) == 0 && n.fromPort == rep.fromPort));
-				s.listWaitingForAnswers.removeAllElements();
+
+			System.out.println("dostałem odp");
+			if(rep.date.isEqual(s.sendRequest.date)) {
+
+				System.out.println("dobra odp");
+				boolean la = s.waitingForAnswers.removeIf(n -> (n.fromHost.compareTo(rep.fromHost) == 0 && n.fromPort == rep.fromPort));
+				if(la)
+					System.out.println("znalazł");
+				s.listWaitingForAnswers.clear();
 		        for(Reply x : s.waitingForAnswers) {
+		        	System.out.println("dodałem do listy odp");
 		        	s.listWaitingForAnswers.addElement(x.fromName);
 		        }
 				

@@ -10,17 +10,66 @@ import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+
+import javax.swing.DefaultListModel;
 
 public class ServerRemote extends UnicastRemoteObject implements ServerInterface {
 
 	private int myPort;
 	private List<User> users;
 	
+	ExecutorService pingThreadPool;
+	Future pingTask;
+	
 	public ServerRemote(int port) throws RemoteException {
 		super();
 		// TODO Auto-generated constructor stub
 		myPort = port;
 		users = new ArrayList<User>();
+		pingThreadPool = Executors.newCachedThreadPool();
+		pingTask = pingThreadPool.submit(() -> CheckPing());
+	}
+	
+	private void CheckPing() {
+		while(true) {
+			try {
+				TimeUnit.SECONDS.sleep(10);
+			}catch(Exception ex) {}
+			for(int i = 0; i < users.size(); i++) {
+				User s = users.get(i);
+				boolean res = false;
+				for(int j = 0; j < 4; j++) {
+					try {
+						Registry reg = LocateRegistry.getRegistry(s.ip,s.port);
+						ClientInterface a = (ClientInterface)reg.lookup("rmi");
+						res = a.Ping();
+					}catch(Exception ex) {}
+					if(res)
+						break;
+					try {
+						TimeUnit.SECONDS.sleep(1);
+					}catch(Exception ex) {}
+				}
+				if(!res) {
+					users.remove(i);
+					for(User x : users) {
+						try {
+							Registry reg = LocateRegistry.getRegistry(x.ip,x.port);
+							ClientInterface a = (ClientInterface)reg.lookup("rmi");
+							a.DeregisterUser(serializableToString(s),myPort);
+						}
+						catch(Exception ex) {
+							System.out.println(ex);
+						}
+					}
+					i--;
+				}
+			}
+		}
 	}
 
 	@Override
