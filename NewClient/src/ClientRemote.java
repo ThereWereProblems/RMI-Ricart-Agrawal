@@ -64,6 +64,7 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 		super();
 
 		frame = new JFrame();
+		frame.setTitle(name + " - " + port);
 		mainPanel = new JPanel();
 		
 		JPanel upPanel = new JPanel();
@@ -74,6 +75,8 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 		sections = new ArrayList<Section>(); 
 		myPort = port;
 		myName = name;
+		
+		selectedInCombo = -1;
 		
 		
 		//up panel
@@ -313,21 +316,17 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 		
 		frame.addWindowListener(new WindowAdapter(){
             public void windowClosing(WindowEvent e){
-                int i=JOptionPane.showConfirmDialog(null, "Seguro que quiere salir?");
-                if(i==0)
-                {
-                	for(Section s : sections) {
-                		try {
-        					Registry reg = LocateRegistry.getRegistry(s.sectionHost,s.sectionPort);
-        					ServerInterface a = (ServerInterface)reg.lookup("rmi");
-        					a.DeregisterUser(myPort);
-        				}
-        				catch(Exception ex) {
-        					
-        				}
-                	}
-                    System.exit(0);//cierra aplicacion
-                }
+            	for(Section s : sections) {
+            		try {
+    					Registry reg = LocateRegistry.getRegistry(s.sectionHost,s.sectionPort);
+    					ServerInterface a = (ServerInterface)reg.lookup("rmi");
+    					a.DeregisterUser(myPort);
+    				}
+    				catch(Exception ex) {
+    					
+    				}
+            	}
+                System.exit(0);//cierra aplicacion}
             }
         });
 
@@ -415,7 +414,6 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 				s.info.setText("Oczekuję: " + maxWait);
 				if(sections.get(selectedInCombo).sectionHost.compareTo(s.sectionHost) == 0 && sections.get(selectedInCombo).sectionPort == s.sectionPort)
 					info.setText(s.info.getText());
-				System.out.println(s.info.getText());
 				maxWait--;
 				try {
 					TimeUnit.SECONDS.sleep(1);
@@ -429,7 +427,6 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 				s.info.setText("Poza sekcją");
 				if(sections.get(selectedInCombo).sectionHost.compareTo(s.sectionHost) == 0 && sections.get(selectedInCombo).sectionPort == s.sectionPort)
 					info.setText(s.info.getText());
-				System.out.println(s.info.getText());
 				//odp
 				for(Request x : s.waitingRequests) {
 					Reply rep = new Reply();
@@ -457,7 +454,6 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 				s.info.setText("Oczekuję");
 			if(sections.get(selectedInCombo).sectionHost.compareTo(s.sectionHost) == 0 && sections.get(selectedInCombo).sectionPort == s.sectionPort)
 				info.setText(s.info.getText());
-			System.out.println(s.info.getText());
 		}
 		return;
 	}
@@ -639,16 +635,11 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 
 			Reply rep = (Reply)objectFromString(_rep);
 
-			System.out.println("dostałem odp");
 			if(rep.date.isEqual(s.sendRequest.date)) {
 
-				System.out.println("dobra odp");
-				boolean la = s.waitingForAnswers.removeIf(n -> (n.fromHost.compareTo(rep.fromHost) == 0 && n.fromPort == rep.fromPort));
-				if(la)
-					System.out.println("znalazł");
+				s.waitingForAnswers.removeIf(n -> (n.fromHost.compareTo(rep.fromHost) == 0 && n.fromPort == rep.fromPort));
 				s.listWaitingForAnswers.clear();
 		        for(Reply x : s.waitingForAnswers) {
-		        	System.out.println("dodałem do listy odp");
 		        	s.listWaitingForAnswers.addElement(x.fromName);
 		        }
 				
