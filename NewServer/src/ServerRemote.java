@@ -198,6 +198,7 @@ public class ServerRemote extends UnicastRemoteObject implements ServerInterface
 	public static void main(String[] args) {
 		// TODO Auto-generated method stub
 		try {
+			System.setProperty("java.rmi.server.hostname", "192.168.0.106");
 			Registry reg = LocateRegistry.createRegistry(Integer.parseInt(args[0]));
 			ServerRemote ar = new ServerRemote(Integer.parseInt(args[0]));
 			reg.rebind("rmi", ar);

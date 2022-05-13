@@ -175,6 +175,7 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 						    "Serwer nie odpowiada.",
 						    "Connecting error",
 						    JOptionPane.ERROR_MESSAGE);
+					System.out.println(ex);
 					return;
 				}	
 				User me = new User();
