@@ -84,6 +84,7 @@ public class ServerRemote extends UnicastRemoteObject implements ServerInterface
 	    try {
 	    	user = (User)objectFromString(_user);
 	    	user.ip = getClientHost();
+	    	System.out.println(user.ip);
 	    	r = serializableToString(users);
 	    }
 	    catch(Exception ex) {
@@ -198,7 +199,12 @@ public class ServerRemote extends UnicastRemoteObject implements ServerInterface
 	public static void main(String[] args) {
 		// TODO Auto-generated method stub
 		try {
-			System.setProperty("java.rmi.server.hostname", "192.168.0.106");
+			if(args.length == 2)
+			{
+				System.setProperty("java.rmi.server.hostname", args[1]);
+				System.out.println("Ebebeb");
+			}
+				
 			Registry reg = LocateRegistry.createRegistry(Integer.parseInt(args[0]));
 			ServerRemote ar = new ServerRemote(Integer.parseInt(args[0]));
 			reg.rebind("rmi", ar);

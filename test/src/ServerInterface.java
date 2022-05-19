@@ -3,6 +3,6 @@ import java.rmi.RemoteException;
 
 public interface ServerInterface extends Remote {
 	
-	public String RegisterNewUser(int port) throws RemoteException;
+	public String Ping() throws RemoteException;
 
 }

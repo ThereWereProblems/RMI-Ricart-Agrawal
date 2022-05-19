@@ -25,45 +25,18 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 
-public class ClientRemote extends UnicastRemoteObject implements ClientInterface{
-	
-	public ClientRemote(int port) throws RemoteException {
-		super();
-		try {
-			Registry reg = LocateRegistry.getRegistry("localhost",1099);
-			ServerInterface a = (ServerInterface)reg.lookup("rmi");
-			String z = a.RegisterNewUser(port);
-			System.out.println(z);
-		}
-		catch(Exception ex) {
-			System.out.println(ex);
-		}	
-	}
+public class ClientRemote{
 
 	public static void main(String[] args) {
 		// TODO Auto-generated method stub
 		try {
-			Registry reg = LocateRegistry.createRegistry(Integer.parseInt(args[0]));
-			ClientRemote ar = new ClientRemote(Integer.parseInt(args[0]));
-			reg.rebind("rmi", ar);
-			System.out.println("Client is ready");
-		}
-		catch(Exception ex)
-		{
-			ex.printStackTrace();
-		}
-	}
-	
-
-	@Override
-	public String Ping() throws RemoteException {
-		// TODO Auto-generated method stub
-		System.out.println("ping");
-		try {
-			return getClientHost();
+			Registry reg = LocateRegistry.getRegistry(args[0],1099);
+			ServerInterface a = (ServerInterface)reg.lookup("rmi");
+			String z = a.Ping();
+			System.out.println(z);
 		}
 		catch(Exception ex) {
-			return ex.getMessage();
+			System.out.println(ex);
 		}
 	}
 	
