@@ -202,7 +202,6 @@ public class ServerRemote extends UnicastRemoteObject implements ServerInterface
 			if(args.length == 2)
 			{
 				System.setProperty("java.rmi.server.hostname", args[1]);
-				System.out.println("Ebebeb");
 			}
 				
 			Registry reg = LocateRegistry.createRegistry(Integer.parseInt(args[0]));

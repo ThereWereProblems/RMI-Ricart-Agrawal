@@ -382,6 +382,12 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 			maxWait = Integer.parseInt(maxWaitingField.getText().trim());
 		}catch(Exception ex) {}
 		
+		if(s.users.size() == 0) {
+			s.taskSection = s.threadpool.submit(() -> CriticSection(s));
+			return;
+		}
+			
+		
 		Request req = new Request();
 		req.fromPort = myPort;
 		req.fromName = myName;
@@ -462,7 +468,7 @@ public class ClientRemote extends UnicastRemoteObject implements ClientInterface
 	private void CriticSection(Section s) {
 		s.inCriticalSection = true;
 		if(s.enterFor > 0) {
-			while(s.enterFor>0) {
+			while(s.enterFor>0 && s.inCriticalSection) {
 				s.info.setText("W sekcji: " + s.enterFor);
 				if(sections.get(selectedInCombo).sectionHost.compareTo(s.sectionHost) == 0 && sections.get(selectedInCombo).sectionPort == s.sectionPort)
 					info.setText(s.info.getText());
